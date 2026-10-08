@@ -37,6 +37,11 @@ SAMPLE_TO_SCHEMA = {
     "insights": "Insights",
     "class_report": "ClassReport",
     "teacher_assistant": "TeacherAssistant",
+    "teacher_profile": "TeacherProfile",
+    "teacher_sessions": "TeacherSessions",
+    "lecturer_session_request": "LecturerSessionRequest",
+    "lecturer_decision": "LecturerDecision",
+    "lecturer_session": "LecturerSession",
 }
 
 

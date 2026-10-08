@@ -281,7 +281,119 @@ paths:
           description: Recorded. No body. The request body is samples/question_event.json
 
   # ---------------------------------------------------------------- M5
-  # M5 proposes these three. The fields below are placeholders until M5 confirms.
+  # Insights / report / assistant: placeholders until M5 confirms.
+  # Profile and sessions: the lecturer assistant (LangGraph), implemented in rafeeq/teacher.
+  # Until M1's login exists, teacher_id is sent explicitly; afterwards it comes from the token.
+  /teacher/profile:
+    get:
+      tags: [M5 teacher]
+      operationId: getTeacherProfile
+      summary: The teacher's profile, defaults for new sessions, and what the assistant remembers.
+      parameters:
+        - { $ref: "#/components/parameters/TeacherId" }
+      responses:
+        "200":
+          description: Sample file samples/teacher_profile.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeacherProfile" }
+        "404": { description: This teacher has no profile yet }
+    put:
+      tags: [M5 teacher]
+      operationId: saveTeacherProfile
+      summary: Create or update the profile. An empty teacher_id creates a new teacher.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TeacherProfileUpdate" }
+      responses:
+        "200":
+          description: The saved profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeacherProfile" }
+
+  /teacher/sessions:
+    get:
+      tags: [M5 teacher]
+      operationId: listTeacherSessions
+      summary: Finished (approved) sessions of a teacher, newest first, with their files.
+      parameters:
+        - { $ref: "#/components/parameters/TeacherId" }
+      responses:
+        "200":
+          description: Sample file samples/teacher_sessions.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeacherSessions" }
+    post:
+      tags: [M5 teacher]
+      operationId: startLecturerSession
+      summary: Prepare a teaching session. Runs the agents and returns when the draft waits for review (can take 1-2 minutes).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LecturerSessionRequest" }
+      responses:
+        "200":
+          description: Sample file samples/lecturer_session.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LecturerSession" }
+        "503": { description: No LLM provider is configured on the server }
+
+  /teacher/sessions/{session_id}:
+    get:
+      tags: [M5 teacher]
+      operationId: getLecturerSession
+      parameters:
+        - { $ref: "#/components/parameters/SessionId" }
+      responses:
+        "200":
+          description: Same shape as samples/lecturer_session.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LecturerSession" }
+        "404": { description: Unknown session }
+
+  /teacher/sessions/{session_id}/decision:
+    post:
+      tags: [M5 teacher]
+      operationId: decideLecturerSession
+      summary: approve -> the files are created (status done). revise -> a new draft is built from the feedback.
+      parameters:
+        - { $ref: "#/components/parameters/SessionId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LecturerDecision" }
+      responses:
+        "200":
+          description: Same shape as samples/lecturer_session.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LecturerSession" }
+        "404": { description: Unknown session }
+        "409": { description: Not waiting for a decision, or the revision limit is reached }
+
+  /teacher/sessions/{session_id}/files/{name}:
+    get:
+      tags: [M5 teacher]
+      operationId: downloadLecturerFile
+      summary: Download a generated file (.pptx, code file, quiz.json, quiz.md). Only names listed in the session.
+      parameters:
+        - { $ref: "#/components/parameters/SessionId" }
+        - { name: name, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The file
+          content:
+            application/octet-stream: {}
+        "404": { description: Unknown session or file }
+
   /teacher/rooms/{room_id}/insights:
     get:
       tags: [M5 teacher]
@@ -333,6 +445,17 @@ components:
       type: http
       scheme: bearer
   parameters:
+    TeacherId:
+      name: teacher_id
+      in: query
+      required: true
+      description: Until M1's login exists. Afterwards the teacher comes from the token.
+      schema: { type: string }
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema: { type: string }
     RoomId:
       name: room_id
       in: path
@@ -787,3 +910,207 @@ components:
         status:
           type: string
           enum: [waiting_for_approval, approved, sent]
+
+    # ------------------------------------------------- M5: profile + lecturer assistant
+    TeacherDefaults:
+      type: object
+      additionalProperties: false
+      required: [language, student_level, programming_language, duration_minutes]
+      properties:
+        language: { type: string, description: "Language the session is taught in, e.g. Arabic" }
+        student_level: { type: string, enum: [beginner, intermediate, advanced] }
+        programming_language: { type: string }
+        duration_minutes: { type: integer, minimum: 15, maximum: 240 }
+
+    TeacherProfileUpdate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        teacher_id: { type: string, description: "Empty = new teacher (an id is made from the name)" }
+        name: { type: string, minLength: 2 }
+        title: { type: string, description: "e.g. د. or Eng." }
+        subjects:
+          type: array
+          items: { type: string }
+        bio: { type: string }
+        defaults: { $ref: "#/components/schemas/TeacherDefaults" }
+
+    TeacherProfile:
+      type: object
+      additionalProperties: false
+      required: [teacher_id, name, title, subjects, bio, defaults, display_name, sessions_count, remembered]
+      properties:
+        teacher_id: { type: string }
+        name: { type: string }
+        title: { type: string }
+        subjects:
+          type: array
+          items: { type: string }
+        bio: { type: string }
+        defaults: { $ref: "#/components/schemas/TeacherDefaults" }
+        display_name: { type: string, description: "title + name, printed on every generated slide" }
+        sessions_count: { type: integer, minimum: 0 }
+        remembered:
+          type: array
+          description: What the assistant learned from approved sessions and change requests, shown to the teacher
+          items: { type: string }
+
+    SessionFile:
+      type: object
+      additionalProperties: false
+      required: [name, url]
+      properties:
+        name: { type: string }
+        url: { type: string }
+
+    PastSession:
+      type: object
+      additionalProperties: false
+      required: [session_id, topic, course_name, room_id, created_at, files]
+      properties:
+        session_id: { type: string }
+        topic: { type: string }
+        course_name: { type: string }
+        room_id: { type: string, description: "Empty if the session is not linked to a room" }
+        created_at: { type: string, description: "ISO date-time, empty for very old sessions" }
+        files:
+          type: array
+          items: { $ref: "#/components/schemas/SessionFile" }
+
+    TeacherSessions:
+      type: object
+      additionalProperties: false
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items: { $ref: "#/components/schemas/PastSession" }
+
+    LecturerSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [lecturer_id, topic, needs]
+      properties:
+        lecturer_id: { type: string, minLength: 1, description: "= teacher_id" }
+        lecturer_name: { type: string, description: "Printed on the slides. Empty = lecturer_id" }
+        room_id: { type: string }
+        topic: { type: string, minLength: 2 }
+        course_name: { type: string }
+        student_level: { type: string, enum: [beginner, intermediate, advanced] }
+        duration_minutes: { type: integer, minimum: 15, maximum: 240 }
+        language: { type: string }
+        programming_language: { type: string }
+        needs:
+          type: array
+          minItems: 1
+          items: { type: string, enum: [slides, code, quiz] }
+        num_quiz_questions: { type: integer, minimum: 1, maximum: 20 }
+        learning_objectives:
+          type: array
+          items: { type: string }
+        notes: { type: string }
+
+    LecturerDecision:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [approve, revise] }
+        feedback: { type: string, description: "Required (not empty) when decision is revise" }
+
+    DraftSlide:
+      type: object
+      additionalProperties: false
+      required: [title, bullets, notes, diagram_steps]
+      properties:
+        title: { type: string }
+        bullets:
+          type: array
+          items: { type: string }
+        notes: { type: string, description: Speaker notes }
+        diagram_steps:
+          type: array
+          description: Optional flow drawn next to the bullets. Empty = no diagram
+          items: { type: string }
+
+    DraftCodeExample:
+      type: object
+      additionalProperties: false
+      required: [title, code, explanation, verified, fix_attempts, output]
+      properties:
+        title: { type: string }
+        code: { type: string }
+        explanation: { type: string }
+        verified:
+          type: [boolean, "null"]
+          description: true = it ran, false = still fails after fixes, null = not run (not Python)
+        fix_attempts: { type: integer, minimum: 0 }
+        output: { type: string, description: What the code printed }
+
+    DraftQuizQuestion:
+      type: object
+      additionalProperties: false
+      required: [question, options, answer_index, explanation]
+      properties:
+        question: { type: string }
+        options:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items: { type: string }
+        answer_index: { type: integer, minimum: 0, maximum: 3 }
+        explanation: { type: string }
+
+    LecturerDraft:
+      type: object
+      additionalProperties: false
+      required: [topic, course_name, language, outline, slides, code_examples, quiz]
+      properties:
+        topic: { type: string }
+        course_name: { type: string }
+        language: { type: string }
+        outline:
+          type: array
+          items: { type: string }
+        slides:
+          type: array
+          items: { $ref: "#/components/schemas/DraftSlide" }
+        code_examples:
+          type: array
+          items: { $ref: "#/components/schemas/DraftCodeExample" }
+        quiz:
+          type: array
+          items: { $ref: "#/components/schemas/DraftQuizQuestion" }
+
+    LecturerSession:
+      type: object
+      additionalProperties: false
+      required: [session_id, room_id, topic, status, selected_agents, reasoning, memory, draft,
+                 revision_count, revisions_left, files]
+      properties:
+        session_id: { type: string }
+        room_id: { type: string }
+        topic: { type: string }
+        status:
+          type: string
+          enum: [awaiting_approval, done, incomplete]
+        selected_agents:
+          type: array
+          items: { type: string, enum: [research_agent, slides_agent, code_agent, quiz_agent] }
+        reasoning: { type: string, description: Why the orchestrator chose these agents }
+        memory:
+          type: array
+          description: What the assistant remembered about the teacher for this session
+          items: { type: string }
+        draft:
+          description: Empty object only if the session stopped before a draft existed (status incomplete)
+          anyOf:
+            - { $ref: "#/components/schemas/LecturerDraft" }
+            - { type: object, maxProperties: 0 }
+        revision_count: { type: integer, minimum: 0 }
+        revisions_left: { type: integer, minimum: 0 }
+        files:
+          type: array
+          description: Filled when status is done
+          items: { $ref: "#/components/schemas/SessionFile" }
