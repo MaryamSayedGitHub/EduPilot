@@ -1,0 +1,789 @@
+# Rafeeq API contract: DRAFT v0 for the contracts meeting.
+# Every field here is a proposal until the team agrees it. After the meeting,
+# M1 commits the agreed version and tags it day1-contracts.
+#
+# How to read this file:
+#   paths       = the routes (addresses) of the app, grouped by owner (tags)
+#   components  = the JSON shapes ("schemas"). Each one matches a file in contracts/samples/
+#   Every schema has additionalProperties: false, so a typo such as "pages" instead
+#   of "page" makes the contract test fail instead of passing silently.
+openapi: 3.1.0
+info:
+  title: Rafeeq API
+  version: 0.1.0-draft
+  description: Contract between the five parts of Rafeeq. Draft v0.
+servers:
+  - url: http://127.0.0.1:8000
+security:
+  - bearerAuth: []
+
+tags:
+  - name: M1 platform
+  - name: M2 knowledge
+  - name: M3 tutor
+  - name: M4 quiz and profile
+  - name: M5 teacher
+
+paths:
+  # ---------------------------------------------------------------- M1
+  /auth/login:
+    post:
+      tags: [M1 platform]
+      operationId: login
+      summary: Log in. Returns a token that every other call sends in the Authorization header.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Sample file samples/login.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Login" }
+
+  /rooms:
+    get:
+      tags: [M1 platform]
+      operationId: listMyRooms
+      summary: The rooms of the logged-in user (course rooms and, if proposal 1 is accepted, My own study).
+      responses:
+        "200":
+          description: Sample file samples/my_rooms.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MyRooms" }
+
+  /rooms/{room_id}/files:
+    post:
+      tags: [M1 platform]
+      operationId: uploadFile
+      summary: Upload a course file into a room. M1 stores it, then asks M2 to index it.
+      parameters:
+        - { $ref: "#/components/parameters/RoomId" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "202":
+          description: Sample file samples/upload_file.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadFile" }
+
+  /snap:
+    post:
+      tags: [M1 platform]
+      operationId: snapAndAsk
+      summary: Read a photo. OpenCV cleans it, a vision-language model returns the text and what kind of photo it is.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [photo]
+              properties:
+                photo: { type: string, format: binary }
+                room_id: { type: string }
+      responses:
+        "200":
+          description: Sample file samples/snap_result.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SnapResult" }
+
+  /copilot/message:
+    post:
+      tags: [M1 platform]
+      operationId: copilotMessage
+      summary: The one entry point for the student. The Copilot picks a route and calls the right part.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CopilotRequest" }
+      responses:
+        "200":
+          description: Sample file samples/copilot_reply.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CopilotReply" }
+
+  # ---------------------------------------------------------------- M2
+  /search:
+    post:
+      tags: [M2 knowledge]
+      operationId: searchMaterial
+      summary: Find the pieces of course material that answer a question.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SearchRequest" }
+      responses:
+        "200":
+          description: Sample file samples/search_material.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SearchMaterial" }
+
+  /rooms/{room_id}/topics:
+    get:
+      tags: [M2 knowledge]
+      operationId: listTopics
+      summary: The topics found in the room's material. M4 and M5 use the topic ids.
+      parameters:
+        - { $ref: "#/components/parameters/RoomId" }
+      responses:
+        "200":
+          description: Sample file samples/room_topics.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoomTopics" }
+
+  /sources/page:
+    get:
+      tags: [M2 knowledge]
+      operationId: getSourcePage
+      summary: Open the exact page a citation points to.
+      parameters:
+        - { $ref: "#/components/parameters/RoomId" }
+        - { name: file_name, in: query, required: true, schema: { type: string } }
+        - { name: page, in: query, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Sample file samples/source_page.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SourcePage" }
+
+  # ---------------------------------------------------------------- M3
+  /tutor/answer:
+    post:
+      tags: [M3 tutor]
+      operationId: tutorAnswer
+      summary: Answer a question using only the room's material. Called by the Copilot.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TutorRequest" }
+      responses:
+        "200":
+          description: Sample file samples/tutor_answer.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TutorAnswer" }
+
+  /tutor/check-work:
+    post:
+      tags: [M3 tutor]
+      operationId: checkWork
+      summary: Check a photo of the student's own work. Marks the first wrong step and gives a hint, not the solution.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CheckWorkRequest" }
+      responses:
+        "200":
+          description: Sample file samples/handwriting_check.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HandwritingCheck" }
+
+  # ---------------------------------------------------------------- M4
+  /quiz:
+    post:
+      tags: [M4 quiz and profile]
+      operationId: makeQuiz
+      summary: Make a quiz on one topic.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MakeQuizRequest" }
+      responses:
+        "200":
+          description: Sample file samples/make_quiz.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quiz" }
+
+  /quiz/{quiz_id}/submit:
+    post:
+      tags: [M4 quiz and profile]
+      operationId: submitQuiz
+      summary: Send the student's answers. Returns the score and how mastery changed.
+      parameters:
+        - { name: quiz_id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubmitQuizRequest" }
+      responses:
+        "200":
+          description: Sample file samples/submit_quiz.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuizResult" }
+
+  /next-step:
+    get:
+      tags: [M4 quiz and profile]
+      operationId: nextStep
+      summary: What the student should do next. Feeds the Today card on the home page.
+      parameters:
+        - { $ref: "#/components/parameters/RoomId" }
+      responses:
+        "200":
+          description: Sample file samples/next_step.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NextStep" }
+
+  /profile/summary:
+    get:
+      tags: [M4 quiz and profile]
+      operationId: profileSummary
+      summary: PROPOSAL 2. Read-only summary of the student, so the tutor can adapt. Called by M3.
+      parameters:
+        - { $ref: "#/components/parameters/RoomId" }
+      responses:
+        "200":
+          description: Sample file samples/student_summary.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentSummary" }
+
+  /events:
+    post:
+      tags: [M4 quiz and profile]
+      operationId: recordEvent
+      summary: PROPOSAL 3. M3 tells M4 that the student asked a question (later also "understood").
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuestionEvent" }
+      responses:
+        "204":
+          description: Recorded. No body. The request body is samples/question_event.json
+
+  # ---------------------------------------------------------------- M5
+  # M5 proposes these three. The fields below are placeholders until M5 confirms.
+  /teacher/rooms/{room_id}/insights:
+    get:
+      tags: [M5 teacher]
+      operationId: teacherInsights
+      summary: What students ask about and which mistakes repeat.
+      parameters:
+        - { $ref: "#/components/parameters/RoomId" }
+      responses:
+        "200":
+          description: Sample file samples/insights.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Insights" }
+
+  /teacher/rooms/{room_id}/report:
+    get:
+      tags: [M5 teacher]
+      operationId: teacherReport
+      summary: How the class is doing per topic, and who is at risk.
+      parameters:
+        - { $ref: "#/components/parameters/RoomId" }
+      responses:
+        "200":
+          description: Sample file samples/class_report.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClassReport" }
+
+  /teacher/assistant:
+    post:
+      tags: [M5 teacher]
+      operationId: teacherAssistant
+      summary: The teacher asks for something (a reply, a summary). The assistant drafts it and waits for approval.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TeacherAssistantRequest" }
+      responses:
+        "200":
+          description: Sample file samples/teacher_assistant.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeacherAssistant" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    RoomId:
+      name: room_id
+      in: path
+      required: true
+      schema: { type: string }
+
+  schemas:
+    # ---- shared small pieces ------------------------------------------------
+    Language:
+      type: string
+      enum: [ar, en]
+    Role:
+      type: string
+      enum: [student, teacher]
+
+    # ---- M1 ------------------------------------------------------------------
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string }
+        password: { type: string }
+
+    Login:
+      type: object
+      additionalProperties: false
+      required: [token, user_id, name, role]
+      properties:
+        token: { type: string }
+        user_id: { type: string }
+        name: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+
+    Room:
+      type: object
+      additionalProperties: false
+      required: [room_id, name, kind, files_ready]
+      properties:
+        room_id: { type: string }
+        name: { type: string }
+        kind:
+          type: string
+          enum: [course, personal]
+          description: "personal exists only if proposal 1 is accepted"
+        files_ready:
+          type: integer
+          minimum: 0
+          description: how many files in the room are indexed and ready
+
+    MyRooms:
+      type: object
+      additionalProperties: false
+      required: [rooms]
+      properties:
+        rooms:
+          type: array
+          items: { $ref: "#/components/schemas/Room" }
+
+    UploadFile:
+      type: object
+      additionalProperties: false
+      required: [file_id, status]
+      properties:
+        file_id: { type: string }
+        status:
+          type: string
+          enum: [uploaded, indexing, ready, failed]
+
+    SnapResult:
+      type: object
+      additionalProperties: false
+      required: [file_id, type, language, text, confidence]
+      properties:
+        file_id: { type: string }
+        type:
+          type: string
+          enum: [student_work, material, diagram, other]
+        language: { $ref: "#/components/schemas/Language" }
+        text: { type: string }
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    CopilotRequest:
+      type: object
+      additionalProperties: false
+      required: [room_id, text]
+      properties:
+        room_id: { type: string }
+        text: { type: string }
+        file_id:
+          type: string
+          description: set when the student attached a photo (the Snap result id)
+
+    CopilotReply:
+      type: object
+      additionalProperties: false
+      required: [route, reply, payload]
+      properties:
+        route:
+          type: string
+          enum: [ask, quiz, check_work, plan, clarify]
+        reply:
+          type: string
+          description: short text shown in the chat
+        payload:
+          type: object
+          description: >
+            Depends on route. ask = a TutorAnswer, quiz = {quiz_id},
+            check_work = a HandwritingCheck, plan and clarify = {}.
+          additionalProperties: true
+
+    # ---- M2 ------------------------------------------------------------------
+    SearchRequest:
+      type: object
+      additionalProperties: false
+      required: [room_id, query]
+      properties:
+        room_id: { type: string }
+        query: { type: string }
+        top_k: { type: integer, minimum: 1, maximum: 20, default: 5 }
+
+    Chunk:
+      type: object
+      additionalProperties: false
+      required: [file_name, page, text, topic_id]
+      properties:
+        file_name: { type: string }
+        page: { type: integer, minimum: 1 }
+        text: { type: string }
+        topic_id: { type: string }
+
+    SearchMaterial:
+      type: object
+      additionalProperties: false
+      required: [chunks]
+      properties:
+        chunks:
+          type: array
+          items: { $ref: "#/components/schemas/Chunk" }
+
+    Topic:
+      type: object
+      additionalProperties: false
+      required: [topic_id, name]
+      properties:
+        topic_id: { type: string }
+        name: { type: string }
+
+    RoomTopics:
+      type: object
+      additionalProperties: false
+      required: [topics]
+      properties:
+        topics:
+          type: array
+          items: { $ref: "#/components/schemas/Topic" }
+
+    SourcePage:
+      type: object
+      additionalProperties: false
+      required: [file_name, page]
+      anyOf:
+        - required: [text]
+        - required: [image_url]
+      properties:
+        file_name: { type: string }
+        page: { type: integer, minimum: 1 }
+        text: { type: string }
+        image_url: { type: string }
+
+    # ---- M3 ------------------------------------------------------------------
+    TutorRequest:
+      type: object
+      additionalProperties: false
+      required: [room_id, question]
+      properties:
+        room_id: { type: string }
+        question: { type: string }
+        language: { $ref: "#/components/schemas/Language" }
+
+    Citation:
+      type: object
+      additionalProperties: false
+      required: [file_name, page]
+      properties:
+        file_name: { type: string }
+        page: { type: integer, minimum: 1 }
+
+    TutorAnswer:
+      type: object
+      additionalProperties: false
+      required: [answer, citations, grounded, steps]
+      properties:
+        answer: { type: string }
+        citations:
+          type: array
+          items: { $ref: "#/components/schemas/Citation" }
+        grounded:
+          type: boolean
+          description: false when the material did not contain the answer
+        steps:
+          type: array
+          items: { type: string }
+          description: PROPOSAL 4. Empty list means one full answer, no step-by-step mode.
+
+    CheckWorkRequest:
+      type: object
+      additionalProperties: false
+      required: [room_id, file_id, text]
+      properties:
+        room_id: { type: string }
+        file_id: { type: string }
+        text:
+          type: string
+          description: the text read from the photo (SnapResult.text)
+
+    Box:
+      type: object
+      additionalProperties: false
+      required: [x, y, width, height]
+      description: A rectangle on the photo. All four numbers are fractions of the image size, from 0 to 1.
+      properties:
+        x: { type: number, minimum: 0, maximum: 1 }
+        y: { type: number, minimum: 0, maximum: 1 }
+        width: { type: number, minimum: 0, maximum: 1 }
+        height: { type: number, minimum: 0, maximum: 1 }
+
+    WorkStep:
+      type: object
+      additionalProperties: false
+      required: [text, correct]
+      properties:
+        text: { type: string }
+        correct: { type: boolean }
+
+    HandwritingCheck:
+      type: object
+      additionalProperties: false
+      required: [boxes, steps, hint]
+      properties:
+        boxes:
+          type: array
+          description: marks the first wrong step. Empty if all steps are correct.
+          items: { $ref: "#/components/schemas/Box" }
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/WorkStep" }
+        hint:
+          type: string
+          description: a nudge, never the full solution
+
+    # ---- M4 ------------------------------------------------------------------
+    MakeQuizRequest:
+      type: object
+      additionalProperties: false
+      required: [room_id, topic_id]
+      properties:
+        room_id: { type: string }
+        topic_id: { type: string }
+        count: { type: integer, minimum: 1, maximum: 20, default: 5 }
+
+    QuizQuestion:
+      type: object
+      additionalProperties: false
+      required: [text, choices, correct_answer, explanation]
+      properties:
+        text: { type: string }
+        choices:
+          type: array
+          minItems: 2
+          items: { type: string }
+        correct_answer:
+          type: string
+          description: must be one of choices
+        explanation: { type: string }
+
+    Quiz:
+      type: object
+      additionalProperties: false
+      required: [quiz_id, topic_id, questions]
+      properties:
+        quiz_id: { type: string }
+        topic_id: { type: string }
+        questions:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/QuizQuestion" }
+
+    SubmitQuizRequest:
+      type: object
+      additionalProperties: false
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          items: { type: string }
+          description: one answer per question, in the same order as Quiz.questions
+
+    MasteryChange:
+      type: object
+      additionalProperties: false
+      required: [topic_id, change]
+      properties:
+        topic_id: { type: string }
+        change:
+          type: number
+          description: "positive = improved. Example 0.1 means +10 points"
+
+    QuizResult:
+      type: object
+      additionalProperties: false
+      required: [score, total, explanations, mastery_change]
+      properties:
+        score: { type: integer, minimum: 0 }
+        total: { type: integer, minimum: 1 }
+        explanations:
+          type: array
+          items: { type: string }
+          description: one per question, same order
+        mastery_change:
+          type: array
+          items: { $ref: "#/components/schemas/MasteryChange" }
+
+    NextStep:
+      type: object
+      additionalProperties: false
+      required: [topic_id, suggestion]
+      properties:
+        topic_id: { type: string }
+        suggestion: { type: string }
+
+    WeakTopic:
+      type: object
+      additionalProperties: false
+      required: [topic_id, score]
+      properties:
+        topic_id: { type: string }
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: mastery from 0 (none) to 1 (full). Low means weak.
+
+    StudentSummary:
+      type: object
+      additionalProperties: false
+      required: [weak_topics, level]
+      properties:
+        weak_topics:
+          type: array
+          items: { $ref: "#/components/schemas/WeakTopic" }
+        level:
+          type: string
+          enum: [beginner, intermediate, advanced]
+
+    QuestionEvent:
+      type: object
+      additionalProperties: false
+      required: [user_id, room_id, topic_id, kind, text, time]
+      properties:
+        user_id: { type: string }
+        room_id: { type: string }
+        topic_id: { type: string }
+        kind:
+          type: string
+          enum: [question, understood]
+          description: understood exists only if proposal 4 is accepted
+        text: { type: string }
+        time: { type: string, format: date-time }
+
+    # ---- M5 (placeholders, M5 confirms) --------------------------------------
+    TopQuestion:
+      type: object
+      additionalProperties: false
+      required: [topic_id, count, example]
+      properties:
+        topic_id: { type: string }
+        count: { type: integer, minimum: 0 }
+        example: { type: string }
+
+    CommonMistake:
+      type: object
+      additionalProperties: false
+      required: [topic_id, description]
+      properties:
+        topic_id: { type: string }
+        description: { type: string }
+
+    Insights:
+      type: object
+      additionalProperties: false
+      required: [top_questions, common_mistakes]
+      properties:
+        top_questions:
+          type: array
+          items: { $ref: "#/components/schemas/TopQuestion" }
+        common_mistakes:
+          type: array
+          items: { $ref: "#/components/schemas/CommonMistake" }
+
+    ClassTopic:
+      type: object
+      additionalProperties: false
+      required: [topic_id, mastery, status]
+      properties:
+        topic_id: { type: string }
+        mastery: { type: number, minimum: 0, maximum: 1 }
+        status:
+          type: string
+          enum: [on_track, watch, struggling]
+
+    StudentAtRisk:
+      type: object
+      additionalProperties: false
+      required: [user_id, name, topic_ids]
+      properties:
+        user_id: { type: string }
+        name: { type: string }
+        topic_ids:
+          type: array
+          items: { type: string }
+
+    ClassReport:
+      type: object
+      additionalProperties: false
+      required: [topics, students_at_risk]
+      properties:
+        topics:
+          type: array
+          items: { $ref: "#/components/schemas/ClassTopic" }
+        students_at_risk:
+          type: array
+          items: { $ref: "#/components/schemas/StudentAtRisk" }
+
+    TeacherAssistantRequest:
+      type: object
+      additionalProperties: false
+      required: [room_id, request]
+      properties:
+        room_id: { type: string }
+        request: { type: string }
+
+    TeacherAssistant:
+      type: object
+      additionalProperties: false
+      required: [draft_reply, status]
+      properties:
+        draft_reply: { type: string }
+        status:
+          type: string
+          enum: [waiting_for_approval, approved, sent]
