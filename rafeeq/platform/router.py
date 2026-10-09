@@ -1,11 +1,19 @@
 from fastapi import APIRouter, File, Form, UploadFile
+from pydantic import BaseModel, ConfigDict
 from rafeeq.samples import load_sample
 from rafeeq.snap.reader import read_snap
+from rafeeq.copilot.supervisor import handle_message
+
 router = APIRouter(tags=["M1 platform"])
 
 # Temporary: one demo account. Replaced with a real database check later.
 DEMO_USER = {"token": "demo-token-sara-123", "user_id": "u_sara", "name": "سارة أحمد", "role": "student"}
 
+class CopilotRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    room_id: str
+    text: str
+    file_id: str | None = None
 
 @router.post("/auth/login")
 def login(body: dict):
@@ -26,3 +34,7 @@ async def snap_and_ask(
 ):
     photo_bytes = await photo.read()
     return read_snap(photo_bytes)
+
+@router.post("/copilot/message")
+def copilot_message(request: CopilotRequest):
+    return handle_message(request.room_id, request.text, request.file_id)
