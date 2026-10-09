@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, File, UploadFile
 from rafeeq.samples import load_sample
 router = APIRouter(tags=["M1 platform"])
 
@@ -13,3 +13,7 @@ def login(body: dict):
 @router.get("/rooms")
 def list_my_rooms():
     return load_sample("my_rooms")
+
+@router.post("/rooms/{room_id}/files", status_code=202)
+def upload_file(room_id: str, file: UploadFile = File(...)):
+    return load_sample("upload_file")
