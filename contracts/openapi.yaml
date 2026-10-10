@@ -55,6 +55,21 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MyRooms" }
+    post:
+      tags: [M1 platform]
+      operationId: createRoom
+      summary: A teacher creates a room and gets its join code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRoomRequest" }
+      responses:
+        "200":
+          description: Sample file samples/create_room.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreateRoomResult" }              
 
   /rooms/{room_id}/files:
     post:
@@ -72,13 +87,72 @@ paths:
               required: [file]
               properties:
                 file: { type: string, format: binary }
+    get:
+      tags: [M1 platform]
+      operationId: listRoomFiles
+      summary: The room's files with their indexing status.
+      parameters:
+        - { $ref: "#/components/parameters/RoomId" }
+      responses:
+        "200":
+          description: Sample file samples/room_files.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoomFiles" }
       responses:
         "202":
           description: Sample file samples/upload_file.json
           content:
             application/json:
               schema: { $ref: "#/components/schemas/UploadFile" }
+  /auth/register:
+    post:
+      tags: [M1 platform]
+      operationId: register
+      summary: Create a student or teacher account. Returns the same thing as login.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "200":
+          description: Sample file samples/register.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Login" }
 
+  /rooms/join:
+    post:
+      tags: [M1 platform]
+      operationId: joinRoom
+      summary: A student joins a room with the teacher's code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JoinRoomRequest" }
+      responses:
+        "200":
+          description: Sample file samples/join_room.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Room" }
+
+  /rooms/{room_id}/students:
+    get:
+      tags: [M1 platform]
+      operationId: listRoomStudents
+      summary: Students in the room with activity and mastery. Teacher only.
+      parameters:
+        - { $ref: "#/components/parameters/RoomId" }
+      responses:
+        "200":
+          description: Sample file samples/room_students.json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoomStudents" }
   /snap:
     post:
       tags: [M1 platform]
@@ -514,7 +588,77 @@ components:
         rooms:
           type: array
           items: { $ref: "#/components/schemas/Room" }
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email, password, role]
+      properties:
+        name: { type: string }
+        email: { type: string }
+        password: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        join_code: { type: string, description: "optional, students only" }
 
+    JoinRoomRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: { type: string }
+
+    CreateRoomRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string }
+
+    CreateRoomResult:
+      type: object
+      additionalProperties: false
+      required: [room, join_code]
+      properties:
+        room: { $ref: "#/components/schemas/Room" }
+        join_code: { type: string }
+
+    RoomFile:
+      type: object
+      additionalProperties: false
+      required: [file_id, name, source, status]
+      properties:
+        file_id: { type: string }
+        name: { type: string }
+        source: { type: string, enum: [teacher, assistant] }
+        status: { type: string, enum: [uploaded, indexing, ready, failed] }
+
+    RoomFiles:
+      type: object
+      additionalProperties: false
+      required: [files]
+      properties:
+        files:
+          type: array
+          items: { $ref: "#/components/schemas/RoomFile" }
+
+    RoomStudent:
+      type: object
+      additionalProperties: false
+      required: [user_id, name, questions_this_week, mastery, status]
+      properties:
+        user_id: { type: string }
+        name: { type: string }
+        questions_this_week: { type: integer, minimum: 0 }
+        mastery: { type: number, minimum: 0, maximum: 1 }
+        status: { type: string, enum: [on_track, watch, struggling] }
+
+    RoomStudents:
+      type: object
+      additionalProperties: false
+      required: [students]
+      properties:
+        students:
+          type: array
+          items: { $ref: "#/components/schemas/RoomStudent" }
     UploadFile:
       type: object
       additionalProperties: false
